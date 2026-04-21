@@ -66,5 +66,3 @@
 * Parking full
 * Removing non-existing vehicles
 * File errors
-
--
