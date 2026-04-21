@@ -1,0 +1,915 @@
+
+INCLUDE Irvine32.inc
+
+.data
+MAX_CAPACITY = 10
+
+filename BYTE "parking_records.txt",0
+fileHandle DWORD ?
+linechange byte 0Dh,0Ah,0
+tempBuffer BYTE 20 DUP(?)
+fileBuffer BYTE 1000 DUP(?)
+
+error_file BYTE " ERROR: Cannot create file! ",0
+error_input BYTE " ERROR: Invalid input! Please enter a number.",0
+error_full BYTE " ERROR: Parking is full!",0
+error_empty BYTE " ERROR: No vehicles of this type parked!",0
+error_range BYTE " ERROR: Input out of valid range!",0
+error_load BYTE " ERROR: Cannot load previous data. Starting fresh.",0
+
+success_vehicle BYTE " SUCCESS: Vehicle added successfully!",0
+success_remove BYTE " SUCCESS: Vehicle removed successfully!",0
+success_clear BYTE " SUCCESS: All records cleared!",0
+success_save BYTE " SUCCESS: Records saved to file!",0
+success_load BYTE " SUCCESS: Previous data loaded successfully!",0
+
+menu_title BYTE "****** PARKING MANAGEMENT SYSTEM ******",0ah,0ah,0
+menu_capacity BYTE " Capacity: 10 vehicles | Current: ",0
+menu_divider BYTE "----------------------------------------",0ah,0
+
+menu_items BYTE 0ah,
+" 1. Add Rikshaw (Fee: $1)",0ah,
+" 2. Add Car (Fee: $2)",0ah,
+" 3. Add Bus (Fee: $3)",0ah,
+" 4. Show Records & Save",0ah,
+" 5. Remove Vehicle",0ah,
+" 6. Clear All Records",0ah,
+" 7. Clear Screen",0ah,
+" 8. Exit Program",0ah,0ah,0
+
+remove_menu BYTE 0ah,
+"****** REMOVE VEHICLE ******",0ah,0ah,
+" 1. Remove Rikshaw",0ah,
+" 2. Remove Car",0ah,
+" 3. Remove Bus",0ah,
+" 4. Back to Main Menu",0ah,0ah,0
+
+str_vehicle BYTE " Vehicle: ",0
+str_fee BYTE " Parking Fee: $",0
+str_count BYTE " Current Count: ",0
+str_total_amount BYTE " Total Revenue: $",0
+str_total_vehicles BYTE " Total Vehicles: ",0
+str_rikshaws BYTE " Rikshaws: ",0
+str_cars BYTE " Cars: ",0
+str_buses BYTE " Buses: ",0
+str_records BYTE "****** PARKING RECORDS ******",0ah,0ah,0
+
+str_press_enter BYTE " Press ENTER to continue... ",0
+str_enter_choice BYTE " Enter your choice (1-8): ",0
+str_enter_remove BYTE " Enter choice (1-4): ",0
+str_exit BYTE " Thank you for using Parking Management System!",0
+
+vehicle_rikshaw BYTE "Rikshaw",0
+vehicle_car BYTE "Car",0
+vehicle_bus BYTE "Bus",0
+
+amount DWORD 0
+count DWORD 0
+rikshawcount DWORD 0
+carcount DWORD 0
+buscount DWORD 0
+record_number DWORD 0
+
+current_count_str BYTE "   ",0
+record_header BYTE "Record #",0
+
+topLineDQ BYTE "******************************************************",0
+spaces10 BYTE "          ",0      ; 10 spaces before title
+titlee BYTE "PARKING MANAGEMENT SYSTEM",0
+author BYTE "Made by Irfan and Talha",0
+
+.code
+
+TitleScreen PROC
+    call Clrscr
+
+    mov edx, OFFSET topLineDQ
+    call WriteString
+    call crlf
+
+    mov edx, OFFSET spaces10
+    call WriteString
+    mov edx, OFFSET titlee
+    call WriteString
+    call crlf
+
+    mov edx, OFFSET topLineDQ
+    call WriteString
+    call crlf
+
+    call crlf
+    mov edx, OFFSET author
+    call WriteString
+
+    call crlf
+    call crlf
+    call WaitMsg
+    call Clrscr
+    ret
+TitleScreen ENDP
+
+main PROC
+    mov eax,red+(black*16)
+    call settextcolor
+    call TitleScreen
+    
+    
+    call LoadFromFile 
+    mov eax, lightGreen + (black * 16)
+    call SetTextColor
+    call MainMenu
+    call ExitProgram
+main ENDP
+
+InitializeSystem PROC
+    mov amount, 0
+    mov count, 0
+    mov rikshawcount, 0
+    mov carcount, 0
+    mov buscount, 0
+    mov record_number, 0
+    ret
+InitializeSystem ENDP
+
+LoadFromFile PROC
+    pushad
+    
+    ; Try to open existing file
+    mov edx, OFFSET filename
+    call OpenInputFile
+    cmp eax, INVALID_HANDLE_VALUE
+    je file_not_exist
+    
+    mov fileHandle, eax
+    
+    ; Read the entire file
+    mov edx, OFFSET fileBuffer
+    mov ecx, 1000
+    call ReadFromFile
+    jc read_error
+    
+    ; Initialize all counts to zero first
+    call InitializeSystem
+    
+    ; Parse the file content
+    mov esi, OFFSET fileBuffer
+    
+    ; Look for each vehicle type and parse counts
+    call FindAndParseCounts
+    
+    mov eax, fileHandle
+    call CloseFile
+    
+    ; Show success message
+    mov edx, OFFSET success_load
+    call WriteString
+    call Crlf
+    call WaitForEnter
+    jmp load_done
+    
+read_error:
+    mov edx, OFFSET error_load
+    call WriteString
+    call Crlf
+    call InitializeSystem
+    jmp load_done
+    
+file_not_exist:
+    ; File doesn't exist yet, start with zero counts
+    call InitializeSystem
+    
+load_done:
+    popad
+    ret
+LoadFromFile ENDP
+
+FindAndParseCounts PROC
+    pushad
+    mov esi, OFFSET fileBuffer
+    
+parse_loop:
+    ; Look for "Total Revenue: $"
+    mov edi, OFFSET str_total_amount
+    call FindString
+    jc next_section1
+    call ParseNumberAfterColon
+    mov amount, eax
+    
+next_section1:
+    ; Look for "Total Vehicles: "
+    mov edi, OFFSET str_total_vehicles
+    call FindString
+    jc next_section2
+    call ParseNumberAfterColon
+    mov count, eax
+    
+next_section2:
+    ; Look for "Rikshaws: "
+    mov edi, OFFSET str_rikshaws
+    call FindString
+    jc next_section3
+    call ParseNumberAfterColon
+    mov rikshawcount, eax
+    
+next_section3:
+    ; Look for "Cars: "
+    mov edi, OFFSET str_cars
+    call FindString
+    jc next_section4
+    call ParseNumberAfterColon
+    mov carcount, eax
+    
+next_section4:
+    ; Look for "Buses: "
+    mov edi, OFFSET str_buses
+    call FindString
+    jc parse_done
+    call ParseNumberAfterColon
+    mov buscount, eax
+    
+parse_done:
+    popad
+    ret
+FindAndParseCounts ENDP
+
+FindString PROC
+    push eax
+    push ebx
+    push ecx
+    push edx
+    
+    mov ecx, 500  ; Max search length
+    
+search_outer:
+    mov ebx, edi  ; EBX = string to find
+    mov edx, esi  ; EDX = current position in buffer
+    
+compare_loop:
+    mov al, [ebx]
+    cmp al, 0     ; End of search string?
+    je found
+    cmp al, [edx]
+    jne not_match
+    inc ebx
+    inc edx
+    jmp compare_loop
+    
+not_match:
+    inc esi
+    loop search_outer
+    stc           ; Not found
+    jmp done_find
+    
+found:
+    mov esi, edx  ; Move ESI to position after found string
+    clc           ; Found
+    
+done_find:
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    ret
+FindString ENDP
+
+ParseNumberAfterColon PROC
+    push ebx
+    push edx
+    xor eax, eax
+    xor ebx, ebx
+    
+skip_spaces:
+    mov bl, [esi]
+    cmp bl, ' '
+    jne start_parse
+    inc esi
+    jmp skip_spaces
+    
+start_parse:
+parse_loop:
+    mov bl, [esi]
+    cmp bl, '0'
+    jb parse_done
+    cmp bl, '9'
+    ja parse_done
+    
+    sub bl, '0'
+    imul eax, 10
+    add eax, ebx
+    inc esi
+    jmp parse_loop
+    
+parse_done:
+    pop edx
+    pop ebx
+    ret
+ParseNumberAfterColon ENDP
+
+ExceptionHandler PROC
+    call Crlf
+    mov eax, red + (black * 16)
+    call SetTextColor
+    call WriteString
+    call Crlf
+    mov eax, lightGreen + (black * 16)
+    call SetTextColor
+    call WaitForEnter
+    ret
+ExceptionHandler ENDP
+
+SafeInput PROC
+    push edx
+    mov edx, OFFSET str_enter_choice
+    call WriteString
+    call ReadInt
+    jno input_valid
+    call ClearInputBuffer
+    mov edx, OFFSET error_input
+    call ExceptionHandler
+    mov eax, -1
+input_valid:
+    pop edx
+    ret
+SafeInput ENDP
+
+ClearInputBuffer PROC
+    push ecx
+    mov ecx, 1000
+clear_loop:
+    call ReadChar
+    loop clear_loop
+    pop ecx
+    ret
+ClearInputBuffer ENDP
+
+WaitForEnter PROC
+    push edx
+    call Crlf
+    mov edx, OFFSET str_press_enter
+    call WriteString
+wait_loop:
+    call ReadChar
+    cmp al, 0Dh
+    jne wait_loop
+    pop edx
+    ret
+WaitForEnter ENDP
+
+DisplayStatus PROC
+    pushad
+    mov eax, count
+    mov edi, OFFSET current_count_str
+    call ConvertToString
+    mov edx, OFFSET menu_capacity
+    call WriteString
+    mov edx, OFFSET current_count_str
+    call WriteString
+    call Crlf
+    mov edx, OFFSET menu_divider
+    call WriteString
+    popad
+    ret
+DisplayStatus ENDP
+
+ConvertToString PROC
+    pushad
+    mov ebx, 10
+    mov ecx, 0
+    
+    ; Handle zero case
+    test eax, eax
+    jnz convert_loop
+    mov byte ptr [edi], '0'
+    mov byte ptr [edi+1], 0
+    jmp done_convert
+    
+convert_loop:
+    xor edx, edx
+    div ebx
+    add dl, '0'
+    push dx
+    inc ecx
+    test eax, eax
+    jnz convert_loop
+    
+    ; Pop digits into buffer
+    mov esi, edi
+pop_loop:
+    pop ax
+    mov [esi], al
+    inc esi
+    loop pop_loop
+    mov byte ptr [esi], 0
+    
+done_convert:
+    popad
+    ret
+ConvertToString ENDP
+
+MainMenu PROC
+menu_loop:
+    call ClrScr
+    mov edx, OFFSET menu_title
+    call WriteString
+    call DisplayStatus
+    mov edx, OFFSET menu_items
+    call WriteString
+    call SafeInput
+    cmp eax, -1
+    je menu_loop
+    call ProcessMenuChoice
+    cmp eax, 1
+    je menu_loop
+    ret
+MainMenu ENDP
+
+ProcessMenuChoice PROC
+    cmp eax, 1
+    je add_rikshaw
+    cmp eax, 2
+    je add_car
+    cmp eax, 3
+    je add_bus
+    cmp eax, 4
+    je show_records
+    cmp eax, 5
+    je remove_vehicle
+    cmp eax, 6
+    je clear_records
+    cmp eax, 7
+    je clear_screen
+    cmp eax, 8
+    je exit_program
+    
+    mov edx, OFFSET error_range
+    call ExceptionHandler
+    mov eax, 1
+    ret
+
+add_rikshaw:
+    mov esi, OFFSET vehicle_rikshaw
+    mov eax, 1
+    jmp menu_processed
+
+add_car:
+    mov esi, OFFSET vehicle_car
+    mov eax, 2
+    jmp menu_processed
+
+add_bus:
+    mov esi, OFFSET vehicle_bus
+    mov eax, 3
+
+menu_processed:
+    call AddVehicleHandler
+    mov eax, 1
+    ret
+
+show_records:
+    call ShowRecords
+    mov eax, 1
+    ret
+
+remove_vehicle:
+    call RemoveVehicleMenu
+    mov eax, 1
+    ret
+
+clear_records:
+    call ClearRecords
+    mov eax, 1
+    ret
+
+clear_screen:
+    call ClrScr
+    mov eax, 1
+    ret
+
+exit_program:
+    mov eax, 0
+    ret
+ProcessMenuChoice ENDP
+
+AddVehicle PROC
+    mov eax, count
+    cmp eax, MAX_CAPACITY
+    jl capacity_ok
+    mov edx, OFFSET error_full
+    call ExceptionHandler
+    stc
+    ret
+
+capacity_ok:
+    inc count
+    clc
+    ret
+AddVehicle ENDP
+
+AddVehicleHandler PROC
+    pushad
+    call AddVehicle
+    jc add_failed
+    
+    cmp eax, 1
+    je add_rikshaw_count
+    cmp eax, 2
+    je add_car_count
+    cmp eax, 3
+    je add_bus_count
+
+add_rikshaw_count:
+    inc rikshawcount
+    add amount, 1
+    jmp add_success
+
+add_car_count:
+    inc carcount
+    add amount, 2
+    jmp add_success
+
+add_bus_count:
+    inc buscount
+    add amount, 3
+
+add_success:
+    mov edx, OFFSET success_vehicle
+    call WriteString
+    call Crlf
+    
+    mov edx, OFFSET str_vehicle
+    call WriteString
+    mov edx, esi
+    call WriteString
+    call Crlf
+    
+    mov edx, OFFSET str_fee
+    call WriteString
+    call WriteDec
+    call Crlf
+    
+    mov edx, OFFSET str_count
+    call WriteString
+    mov eax, count
+    call WriteDec
+    call Crlf
+    
+    call WaitForEnter
+    
+add_failed:
+    popad
+    ret
+AddVehicleHandler ENDP
+
+RemoveVehicleMenu PROC
+menu_loop:
+    call ClrScr
+    mov edx, OFFSET remove_menu
+    call WriteString
+    
+    mov edx, OFFSET str_enter_remove
+    call WriteString
+    
+    call ReadInt
+    jno input_ok
+    
+    call ClearInputBuffer
+    mov edx, OFFSET error_input
+    call ExceptionHandler
+    jmp menu_loop
+
+input_ok:
+    cmp eax, 1
+    jb invalid_range
+    cmp eax, 4
+    ja invalid_range
+    
+    cmp eax, 1
+    je remove_rikshaw
+    cmp eax, 2
+    je remove_car
+    cmp eax, 3
+    je remove_bus
+    cmp eax, 4
+    je exit_remove
+    
+    jmp menu_loop
+
+invalid_range:
+    mov edx, OFFSET error_range
+    call ExceptionHandler
+    jmp menu_loop
+
+remove_rikshaw:
+    mov ebx, OFFSET rikshawcount
+    mov ecx, 1
+    jmp process_remove
+
+remove_car:
+    mov ebx, OFFSET carcount
+    mov ecx, 2
+    jmp process_remove
+
+remove_bus:
+    mov ebx, OFFSET buscount
+    mov ecx, 3
+
+process_remove:
+    call RemoveVehicle
+    jmp menu_loop
+
+exit_remove:
+    ret
+RemoveVehicleMenu ENDP
+
+RemoveVehicle PROC
+    pushad
+    
+    mov eax, [ebx]
+    test eax, eax
+    jz no_vehicle
+    
+    dec eax
+    mov [ebx], eax
+    dec count
+    
+   
+
+remove_success:
+    mov edx, OFFSET success_remove
+    call WriteString
+    call Crlf
+    jmp remove_done
+
+no_vehicle:
+    mov edx, OFFSET error_empty
+    call ExceptionHandler
+
+remove_done:
+    call WaitForEnter
+    popad
+    ret
+RemoveVehicle ENDP
+
+ShowRecords PROC
+    pushad
+    
+    call ClrScr
+    mov edx, OFFSET str_records
+    call WriteString
+    
+    ; Display records
+    mov edx, OFFSET str_total_amount
+    call WriteString
+    mov eax, amount
+    call WriteDec
+    call Crlf
+    
+    mov edx, OFFSET str_total_vehicles
+    call WriteString
+    mov eax, count
+    call WriteDec
+    call Crlf
+    
+    mov edx, OFFSET str_rikshaws
+    call WriteString
+    mov eax, rikshawcount
+    call WriteDec
+    call Crlf
+    
+    mov edx, OFFSET str_cars
+    call WriteString
+    mov eax, carcount
+    call WriteDec
+    call Crlf
+    
+    mov edx, OFFSET str_buses
+    call WriteString
+    mov eax, buscount
+    call WriteDec
+    call Crlf
+    
+    ; Save to file
+    call SaveToFile
+    
+    call WaitForEnter
+    popad
+    ret
+ShowRecords ENDP
+
+SaveToFile PROC
+    pushad
+    
+    ; Create/Overwrite the file
+    mov edx, OFFSET filename
+    call CreateOutputFile
+    mov fileHandle, eax
+    
+    ; Check for error
+    cmp eax, INVALID_HANDLE_VALUE
+    je file_error
+    
+    ; Write the Header Title FIRST
+    mov edx, OFFSET str_records
+    call StrLength
+    mov ecx, eax
+    mov eax, fileHandle
+    mov edx, OFFSET str_records
+    call WriteToFile
+
+    ; Write the numeric data
+    call WriteSimpleRecord
+    
+    ; Close the file
+    mov eax, fileHandle
+    call CloseFile
+    
+    ; Success Message
+    mov edx, OFFSET success_save
+    call WriteString
+    call Crlf
+    jmp save_done
+
+file_error:
+    mov edx, OFFSET error_file
+    call WriteString
+    call Crlf
+
+save_done:
+    popad
+    ret
+SaveToFile ENDP
+
+WriteSimpleRecord PROC
+    pushad
+   
+    ; --- WRITE TOTAL REVENUE ---
+    mov edx, OFFSET str_total_amount
+    call StrLength
+    mov ecx, eax
+    mov eax, fileHandle
+    mov edx, OFFSET str_total_amount
+    call WriteToFile
+    
+    mov eax, amount
+    mov edi, OFFSET tempBuffer
+    call ConvertToString
+    
+    mov edx, OFFSET tempBuffer
+    call StrLength
+    mov ecx, eax
+    mov eax, fileHandle
+    mov edx, OFFSET tempBuffer
+    call WriteToFile
+    
+    mov edx, OFFSET linechange
+    mov ecx, 2
+    mov eax, fileHandle
+    call WriteToFile
+    
+    mov edx, OFFSET str_total_vehicles
+    call StrLength
+    mov ecx, eax
+    mov eax, fileHandle
+    mov edx, OFFSET str_total_vehicles
+    call WriteToFile
+    
+    mov eax, count
+    mov edi, OFFSET tempBuffer
+    call ConvertToString
+    
+    mov edx, OFFSET tempBuffer
+    call StrLength
+    mov ecx, eax
+    mov eax, fileHandle
+    mov edx, OFFSET tempBuffer
+    call WriteToFile
+    
+    mov edx, OFFSET linechange
+    mov ecx, 2
+    mov eax, fileHandle
+    call WriteToFile
+
+    mov edx, OFFSET str_rikshaws
+    call StrLength
+    mov ecx, eax
+    mov eax, fileHandle
+    mov edx, OFFSET str_rikshaws
+    call WriteToFile
+
+    mov eax, rikshawcount
+    mov edi, OFFSET tempBuffer
+    call ConvertToString
+
+    mov edx, OFFSET tempBuffer
+    call StrLength
+    mov ecx, eax
+    mov eax, fileHandle
+    mov edx, OFFSET tempBuffer
+    call WriteToFile
+
+    mov edx, OFFSET linechange
+    mov ecx, 2
+    mov eax, fileHandle
+    call WriteToFile
+
+    mov edx, OFFSET str_cars
+    call StrLength
+    mov ecx, eax
+    mov eax, fileHandle
+    mov edx, OFFSET str_cars
+    call WriteToFile
+
+    mov eax, carcount
+    mov edi, OFFSET tempBuffer
+    call ConvertToString
+
+    mov edx, OFFSET tempBuffer
+    call StrLength
+    mov ecx, eax
+    mov eax, fileHandle
+    mov edx, OFFSET tempBuffer
+    call WriteToFile
+
+    mov edx, OFFSET linechange
+    mov ecx, 2
+    mov eax, fileHandle
+    call WriteToFile
+
+    mov edx, OFFSET str_buses
+    call StrLength
+    mov ecx, eax
+    mov eax, fileHandle
+    mov edx, OFFSET str_buses
+    call WriteToFile
+
+    mov eax, buscount
+    mov edi, OFFSET tempBuffer
+    call ConvertToString
+
+    mov edx, OFFSET tempBuffer
+    call StrLength
+    mov ecx, eax
+    mov eax, fileHandle
+    mov edx, OFFSET tempBuffer
+    call WriteToFile
+
+    mov edx, OFFSET linechange
+    mov ecx, 2
+    mov eax, fileHandle
+    call WriteToFile
+    
+    popad
+    ret
+WriteSimpleRecord ENDP
+
+ClearRecords PROC
+    pushad
+    
+    call ClrScr
+    mov edx, OFFSET str_records
+    call WriteString
+    
+    mov edx, OFFSET str_total_vehicles
+    call WriteString
+    mov eax, count
+    call WriteDec
+    call Crlf
+    
+    mov edx, OFFSET str_total_amount
+    call WriteString
+    mov eax, amount
+    call WriteDec
+    call Crlf
+    
+    call Crlf
+    mov edx, OFFSET success_clear
+    call WriteString
+    call Crlf
+    
+    call InitializeSystem
+    
+    ; Also clear the file
+    mov edx, OFFSET filename
+    call CreateOutputFile
+    cmp eax, INVALID_HANDLE_VALUE
+    je clear_file_error
+    mov fileHandle, eax
+    mov eax, fileHandle
+    call CloseFile
+    
+clear_file_error:
+    call WaitForEnter
+    popad
+    ret
+ClearRecords ENDP
+
+ExitProgram PROC
+    call ClrScr
+    mov edx, OFFSET str_exit
+    call WriteString
+    call Crlf
+    call Crlf
+    exit
+ExitProgram ENDP
+
+END main
