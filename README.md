@@ -9,8 +9,6 @@
 * Manages vehicle parking, counts, and revenue
 * Stores and loads data from a file
 
----
-
 ### ✨ Features
 
 * Add vehicles:
@@ -31,8 +29,6 @@
 * Clear all records
 * Input validation and error handling
 
----
-
 ### 🧠 Concepts Used
 
 * Assembly Language (x86)
@@ -41,8 +37,6 @@
 * Procedures and Modular Programming
 * Loops and Conditions
 * String Processing
-
----
 
 ### 📋 Menu Options
 
@@ -55,8 +49,6 @@
 * 7 → Clear Screen
 * 8 → Exit Program
 
----
-
 ### 💾 File Handling
 
 * Data is saved in:
@@ -67,7 +59,6 @@
   * Program loads previous data if file exists
   * Otherwise starts fresh
 
----
 
 ### ⚠️ Error Handling
 
@@ -75,8 +66,5 @@
 * Parking full
 * Removing non-existing vehicles
 * File errors
-
----
-* Invalid menu choices
 
 -
