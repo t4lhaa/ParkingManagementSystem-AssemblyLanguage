@@ -17,7 +17,7 @@
   * Car 🚗
   * Bus 🚌
 * Remove vehicles
-* Maximum capacity limit (10 vehicles)
+* Maximum capacity limit (10 vehicles default)
 * Automatic fee system:
 
   * Rikshaw → $1
